@@ -1,8 +1,10 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Windowing;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Graphics;
 using WinRT.Interop;
 
 namespace Auto_Clicker
@@ -12,7 +14,7 @@ namespace Auto_Clicker
         private const int GwlWndProc = -4;
         private const int HotKeyId = 0x1200;
         private const uint WmHotKey = 0x0312;
-        private const uint VkF8 = 0x77;
+        private const uint VkF10 = 0x79;
         private const uint MouseeventfLeftdown = 0x0002;
         private const uint MouseeventfLeftup = 0x0004;
 
@@ -26,6 +28,7 @@ namespace Auto_Clicker
         public MainWindow()
         {
             InitializeComponent();
+            ConfigureWindow();
 
             _wndProcDelegate = WindowProc;
             Activated += MainWindow_Activated;
@@ -56,6 +59,18 @@ namespace Auto_Clicker
             }
         }
 
+        private void ConfigureWindow()
+        {
+            IntPtr hwnd = WindowNative.GetWindowHandle(this);
+            if (hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            AppWindow appWindow = AppWindow.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd));
+            appWindow.Resize(new SizeInt32(460, 300));
+        }
+
         private void TryInitializeHotKeyInterop()
         {
             if (_hotKeyRegistered)
@@ -83,15 +98,15 @@ namespace Auto_Clicker
                 _originalWndProc = previousWndProc;
             }
 
-            if (!RegisterHotKey(_hwnd, HotKeyId, 0, VkF8))
+            if (!RegisterHotKey(_hwnd, HotKeyId, 0, VkF10))
             {
                 int registerError = Marshal.GetLastWin32Error();
-                StatusTextBlock.Text = $"状态：F8 热键注册失败（错误码 {registerError}）";
+                StatusTextBlock.Text = $"状态：F10 热键注册失败（错误码 {registerError}）";
                 return;
             }
 
             _hotKeyRegistered = true;
-            StatusTextBlock.Text = "状态：已停止（F8 可用）";
+            StatusTextBlock.Text = "状态：已停止（F10 可用）";
         }
 
         private void ToggleAutoClick()

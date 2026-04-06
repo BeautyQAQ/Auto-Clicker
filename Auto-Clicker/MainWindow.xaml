@@ -13,13 +13,13 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid Padding="24">
-        <StackPanel Spacing="12">
+    <Grid Padding="18">
+        <StackPanel Spacing="10">
             <TextBlock
-                FontSize="24"
+                FontSize="22"
                 FontWeight="SemiBold"
                 Text="Auto Clicker" />
-            <TextBlock Text="按 F8 开始/停止。开始时会记录当前鼠标位置，并在该位置持续点击。" />
+            <TextBlock Text="按 F10 开始/停止。开始时会记录当前鼠标位置，并在该位置持续点击。" />
             <NumberBox
                 x:Name="IntervalNumberBox"
                 Header="点击间隔（毫秒）"
