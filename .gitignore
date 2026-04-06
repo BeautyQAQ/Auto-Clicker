@@ -49,6 +49,8 @@ BundleArtifacts/
 
 # Azure App Service / Publish
 PublishProfiles/
+!Auto-Clicker/Properties/PublishProfiles/
+!Auto-Clicker/Properties/PublishProfiles/*.pubxml
 
 # Test results
 [Tt]est[Rr]esult*/
