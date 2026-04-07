@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-- 项目类型：基于 .NET 8 的 WinUI 3 桌面程序
+- 项目类型：基于 .NET 10 的 WinUI 3 桌面程序（目标框架：`net10.0-windows10.0.19041.0`）
 - 解决方案文件：`Auto-Clicker.slnx`
 - 主项目：`Auto-Clicker/Auto-Clicker.csproj`
 - 当前默认全局热键：`F10`

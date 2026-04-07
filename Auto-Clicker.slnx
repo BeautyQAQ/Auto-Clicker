@@ -6,6 +6,8 @@
   </Configurations>
   <Folder Name="/解决方案项/">
     <File Path=".gitignore" />
+    <File Path="AGENT.md" />
+    <File Path="CLAUDE.md" />
     <File Path="README.md" />
   </Folder>
   <Project Path="Auto-Clicker/Auto-Clicker.csproj">

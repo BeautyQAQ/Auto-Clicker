@@ -15,7 +15,7 @@
 
 ## 技术栈
 
-- .NET 8
+- .NET 10（目标框架：`net10.0-windows10.0.19041.0`）
 - WinUI 3
 - Windows App SDK 1.8
 - 通过 `user32.dll` 进行 Windows 桌面互操作

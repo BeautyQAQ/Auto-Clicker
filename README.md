@@ -11,7 +11,7 @@
 
 ## 运行环境
 - Windows 10 1809+（TargetPlatformMinVersion: 10.0.17763.0）
-- .NET 8 SDK / Visual Studio 2026
+- .NET 10 SDK（目标框架：`net10.0-windows10.0.19041.0`）/ Visual Studio 2026
 - Windows App SDK 1.8（NuGet 引用）
 
 ## 快速开始
