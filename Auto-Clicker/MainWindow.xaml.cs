@@ -18,6 +18,7 @@ namespace Auto_Clicker
         private const int HotKeyId = 0x1200; // 注册热键时的 ID（随便选一个唯一值）
         private const uint WmHotKey = 0x0312; // Windows 消息：热键触发
         private const uint VkF10 = 0x79; // F10 键的虚拟键码
+        private const uint InputMouse = 0; // SendInput 的鼠标输入类型
         private const uint MouseeventfLeftdown = 0x0002; // 鼠标左键按下
         private const uint MouseeventfLeftup = 0x0004; // 鼠标左键弹起
 
@@ -29,6 +30,9 @@ namespace Auto_Clicker
         private bool _hotKeyRegistered;
         private bool _isClicking;
         private CancellationTokenSource? _clickLoopCts;
+        private int _hotKeyTriggerCount;
+        private int _injectedClickCount;
+        private DateTime _lastDiagnosticUpdateUtc = DateTime.MinValue;
 
         public MainWindow()
         {
@@ -43,6 +47,7 @@ namespace Auto_Clicker
 
             // 尝试初始化热键互操作（与 Win32 交互注册热键）
             TryInitializeHotKeyInterop();
+            UpdateDiagnosticText();
         }
 
         private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
@@ -121,6 +126,7 @@ namespace Auto_Clicker
 
             _hotKeyRegistered = true;
             StatusTextBlock.Text = "状态：已停止（F10 可用）";
+            UpdateDiagnosticText();
         }
 
         // 切换开始/停止自动点击
@@ -158,7 +164,10 @@ namespace Auto_Clicker
 
             _clickLoopCts = new CancellationTokenSource();
             _isClicking = true;
+            _injectedClickCount = 0;
+            _lastDiagnosticUpdateUtc = DateTime.MinValue;
             StatusTextBlock.Text = $"状态：连点中（{intervalMs}ms, X={currentPoint.X}, Y={currentPoint.Y}）";
+            InjectionDiagnosticTextBlock.Text = "诊断：已启动注入循环，等待 SendInput 结果...";
 
             // 启动后台循环任务来持续点击（不阻塞 UI 线程）
             _ = RunClickLoopAsync(currentPoint, intervalMs, _clickLoopCts.Token);
@@ -176,6 +185,11 @@ namespace Auto_Clicker
             {
                 StatusTextBlock.Text = "状态：已停止";
             }
+
+            if (InjectionDiagnosticTextBlock.Text.StartsWith("诊断：SendInput 成功", StringComparison.Ordinal))
+            {
+                InjectionDiagnosticTextBlock.Text = "诊断：注入循环已停止";
+            }
         }
 
         private async Task RunClickLoopAsync(POINT point, int intervalMs, CancellationToken cancellationToken)
@@ -184,10 +198,31 @@ namespace Auto_Clicker
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    // 将鼠标移动到指定位置并模拟一次左键点击（按下 + 抬起）
-                    SetCursorPos(point.X, point.Y);
-                    mouse_event(MouseeventfLeftdown, 0, 0, 0, UIntPtr.Zero);
-                    mouse_event(MouseeventfLeftup, 0, 0, 0, UIntPtr.Zero);
+                    // 将鼠标移动到指定位置并通过 SendInput 注入一次左键点击（按下 + 抬起）
+                    if (!SetCursorPos(point.X, point.Y))
+                    {
+                        int cursorError = Marshal.GetLastWin32Error();
+                        InjectionDiagnosticTextBlock.Text = $"诊断：SetCursorPos 失败（错误码 {cursorError}）";
+                    }
+
+                    uint sentCount = SendLeftClickInput();
+                    if (sentCount != 2)
+                    {
+                        int sendError = Marshal.GetLastWin32Error();
+                        InjectionDiagnosticTextBlock.Text = $"诊断：SendInput 返回 {sentCount}/2（错误码 {sendError}）";
+                    }
+                    else
+                    {
+                        _injectedClickCount++;
+                        DateTime nowUtc = DateTime.UtcNow;
+                        if ((nowUtc - _lastDiagnosticUpdateUtc).TotalMilliseconds >= 1000)
+                        {
+                            InjectionDiagnosticTextBlock.Text =
+                                $"诊断：SendInput 成功 {_injectedClickCount} 次（最近 {DateTime.Now:HH:mm:ss}）";
+                            _lastDiagnosticUpdateUtc = nowUtc;
+                        }
+                    }
+
                     // 使用可取消的延迟，保证停止时能及时退出循环
                     await Task.Delay(intervalMs, cancellationToken);
                 }
@@ -218,6 +253,8 @@ namespace Auto_Clicker
             if (message == WmHotKey && wParam.ToInt32() == HotKeyId)
             {
                 // 当 F10 被按下时切换自动点击状态
+                _hotKeyTriggerCount++;
+                UpdateDiagnosticText();
                 ToggleAutoClick();
                 return IntPtr.Zero;
             }
@@ -239,6 +276,32 @@ namespace Auto_Clicker
             public int Y;
         }
 
+        // MOUSEINPUT / INPUT 用于 SendInput 注入鼠标事件
+        [StructLayout(LayoutKind.Sequential)]
+        private struct INPUT
+        {
+            public uint type;
+            public INPUTUNION U;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        private struct INPUTUNION
+        {
+            [FieldOffset(0)]
+            public MOUSEINPUT mi;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MOUSEINPUT
+        {
+            public int dx;
+            public int dy;
+            public uint mouseData;
+            public uint dwFlags;
+            public uint time;
+            public UIntPtr dwExtraInfo;
+        }
+
         // WndProc 委托类型，用于窗口过程替换
         private delegate IntPtr WndProc(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
 
@@ -256,6 +319,9 @@ namespace Auto_Clicker
         private static extern bool SetCursorPos(int x, int y);
 
         [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint SendInput(uint nInputs, [In] INPUT[] pInputs, int cbSize);
+
+        [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
@@ -267,9 +333,6 @@ namespace Auto_Clicker
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
         private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
 
-        [DllImport("user32.dll")]
-        private static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
-
         // SetWindowLongPtr 是一个跨平台（x86/x64）封装，用于设置窗口过程指针
         private static IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
         {
@@ -279,6 +342,49 @@ namespace Auto_Clicker
             }
 
             return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
+        }
+
+        private static uint SendLeftClickInput()
+        {
+            INPUT[] inputs =
+            {
+                new INPUT
+                {
+                    type = InputMouse,
+                    U = new INPUTUNION
+                    {
+                        mi = new MOUSEINPUT
+                        {
+                            dwFlags = MouseeventfLeftdown
+                        }
+                    }
+                },
+                new INPUT
+                {
+                    type = InputMouse,
+                    U = new INPUTUNION
+                    {
+                        mi = new MOUSEINPUT
+                        {
+                            dwFlags = MouseeventfLeftup
+                        }
+                    }
+                }
+            };
+
+            return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        }
+
+        private void UpdateDiagnosticText()
+        {
+            string hotKeyState = _hotKeyRegistered ? "已注册" : "未注册";
+            HotKeyDiagnosticTextBlock.Text =
+                $"诊断：热键{hotKeyState}，F10 触发 {_hotKeyTriggerCount} 次";
+
+            if (_injectedClickCount == 0 && !_isClicking)
+            {
+                InjectionDiagnosticTextBlock.Text = "诊断：尚未开始注入点击";
+            }
         }
     }
 }

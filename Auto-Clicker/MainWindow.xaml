@@ -60,6 +60,16 @@
                 x:Name="StatusTextBlock"
                 FontWeight="SemiBold"
                 Text="状态：已停止" />
+
+            <!-- 诊断：用于区分“热键是否触发”与“注入是否成功” -->
+            <TextBlock
+                x:Name="HotKeyDiagnosticTextBlock"
+                Text="诊断：热键未初始化" />
+
+            <TextBlock
+                x:Name="InjectionDiagnosticTextBlock"
+                Text="诊断：尚未开始注入点击"
+                TextWrapping="WrapWholeWords" />
         </StackPanel>
     </Grid>
 </Window>
