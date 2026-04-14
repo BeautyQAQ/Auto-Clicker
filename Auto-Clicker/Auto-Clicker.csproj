@@ -1,22 +1,80 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    PropertyGroup 用于定义项目的全局属性。
+    这些属性会影响项目的编译、目标平台、命名空间等。
+  -->
   <PropertyGroup>
+    <!--
+      OutputType 指定输出类型为 WinExe，表示生成 Windows 图形界面程序（而不是控制台程序）。
+    -->
     <OutputType>WinExe</OutputType>
+    <!--
+      TargetFramework 指定目标 .NET 版本和 Windows 版本。
+      这里使用 net10.0-windows10.0.19041.0，表示 .NET 10 和 Windows 10 19041 及以上。
+    -->
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <!--
+      TargetPlatformMinVersion 指定支持的最低 Windows 版本。
+    -->
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <!--
+      RootNamespace 设置项目的默认命名空间。
+    -->
     <RootNamespace>Auto_Clicker</RootNamespace>
+    <!--
+      ApplicationManifest 指定应用程序清单文件。
+      清单文件用于声明应用权限、兼容性等。
+    -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      Platforms 指定支持的平台架构（x86, x64, ARM64）。
+    -->
     <Platforms>x86;x64;ARM64</Platforms>
+    <!--
+      RuntimeIdentifiers 指定运行时标识符，决定可以在哪些平台上发布和运行。
+    -->
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <!--
+      PublishProfile 指定发布配置文件。
+      $(Platform) 是变量，会根据发布时选择的平台自动替换。
+    -->
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+    <!--
+      UseWinUI 表示使用 WinUI 框架（WinUI3 是现代 Windows 应用 UI 框架）。
+    -->
     <UseWinUI>true</UseWinUI>
+    <!--
+      WinUISDKReferences 控制是否自动引用 WinUI SDK。
+      这里为 false，表示不自动引用。
+    -->
     <WinUISDKReferences>false</WinUISDKReferences>
+    <!--
+      EnableMsixTooling 启用 MSIX 打包工具支持。
+      MSIX 是 Windows 应用的现代打包格式。
+    -->
     <EnableMsixTooling>true</EnableMsixTooling>
+    <!--
+      Nullable 启用 C# 8.0 的可空引用类型特性，帮助避免空引用异常。
+    -->
     <Nullable>enable</Nullable>
+    <!--
+      WindowsPackageType 设置为 None，表示不使用特殊的 Windows 包类型。
+    -->
 	<WindowsPackageType>None</WindowsPackageType>
+    <!--
+      AppxPackage 设置为 false，表示不生成 Appx 包。
+    -->
 	<AppxPackage>false</AppxPackage>
+    <!--
+      WindowsAppSDKSelfContained 设置为 true，表示发布时包含 Windows App SDK 运行时。
+    -->
 	<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
+  <!--
+    ItemGroup 用于包含项目资源文件（如图片等）。
+    这些资源会被打包进应用程序。
+  -->
   <ItemGroup>
     <Content Include="Assets\SplashScreen.scale-200.png" />
     <Content Include="Assets\LockScreenLogo.scale-200.png" />
@@ -27,33 +85,44 @@
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
 
+  <!--
+    Manifest 节点用于包含应用程序清单文件。
+  -->
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
   <!--
-    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
-    Tools extension to be activated for this project even if the Windows App SDK Nuget
-    package has not yet been restored.
+    下面的 ItemGroup 用于启用 MSIX 打包工具扩展。
+    只有在 EnableMsixTooling 为 true 时才会生效。
   -->
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <ProjectCapability Include="Msix" />
   </ItemGroup>
+
+  <!--
+    下面的 ItemGroup 用于添加 NuGet 包依赖。
+    这些包提供了 Windows SDK 和 Windows App SDK 的支持。
+  -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.7705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
   </ItemGroup>
 
   <!--
-    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
-    Explorer "Package and Publish" context menu entry to be enabled for this project even if
-    the Windows App SDK Nuget package has not yet been restored.
+    下面的 PropertyGroup 用于启用“打包和发布”菜单。
+    只有在 EnableMsixTooling 为 true 时才会生效。
   -->
   <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
   </PropertyGroup>
 
-  <!-- Publish Properties -->
+  <!--
+    发布相关属性。
+    PublishReadyToRun：发布时是否启用 ReadyToRun（提前编译，提升启动速度）。
+    PublishTrimmed：发布时是否裁剪未用到的代码，减小体积。
+    Debug 模式下关闭，Release 模式下开启。
+  -->
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>

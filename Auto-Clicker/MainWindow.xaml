@@ -1,4 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  MainWindow.xaml
+  这是应用程序的主窗口界面（UI）定义文件，使用 XAML（声明式 UI 标记语言）。
+
+  注释说明（面向初学者）：
+  - `Window`：表示一个顶级应用窗口。WinUI 中的窗口承载所有的 UI 元素。
+  - xmlns / xmlns:x / xmlns:local：这些是命名空间声明，允许在 XAML 中使用不同的控件和属性。
+  - mc:Ignorable="d"：告诉编译器忽略设计时 (design-time) 的属性，这样不会影响运行时。
+  - Title：窗口标题栏显示的文本。
+  - Window.SystemBackdrop / MicaBackdrop：使用 Windows 设计语言中的 Mica 背景效果，使窗口具有现代半透明的外观（需要 Windows 10/11 支持）。
+
+  在下面的布局中我们使用了简单的容器（Grid / StackPanel）来放置文本和控件：
+  - Grid：通用的布局容器，这里仅用于添加内边距。
+  - StackPanel：垂直堆叠子元素，Spacing 控制子元素之间的间距。
+  - TextBlock：用于显示文本（标题和说明）。
+  - NumberBox：WinUI 提供的数字输入控件，这里用于设定“点击间隔（毫秒）”。
+  - StatusTextBlock：用于显示当前状态（例如“已停止”或“连点中”）。
+
+  这些控件在代码后台（MainWindow.xaml.cs）中通过 x:Name 引用，例如 `IntervalNumberBox` 和 `StatusTextBlock`。
+-->
 <Window
     x:Class="Auto_Clicker.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -9,17 +29,24 @@
     mc:Ignorable="d"
     Title="Auto-Clicker">
 
+    <!-- 使用系统的 Mica 背景（如果系统支持），使应用外观更现代 -->
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
+    <!-- 主内容区域：设置内边距并使用竖直堆叠布局 -->
     <Grid Padding="18">
         <StackPanel Spacing="10">
+            <!-- 应用标题 -->
             <TextBlock
                 FontSize="22"
                 FontWeight="SemiBold"
                 Text="Auto Clicker" />
+
+            <!-- 简短说明：告诉用户如何启动/停止自动点击 -->
             <TextBlock Text="按 F10 开始/停止。开始时会记录当前鼠标位置，并在该位置持续点击。" />
+
+            <!-- NumberBox：用于输入点击间隔（毫秒）。可以通过键盘输入或自带微调按钮调整。 -->
             <NumberBox
                 x:Name="IntervalNumberBox"
                 Header="点击间隔（毫秒）"
@@ -27,6 +54,8 @@
                 SmallChange="10"
                 SpinButtonPlacementMode="Inline"
                 Value="100" />
+
+            <!-- 状态显示：通过代码更新此文本以反映当前是否在连点 -->
             <TextBlock
                 x:Name="StatusTextBlock"
                 FontWeight="SemiBold"
