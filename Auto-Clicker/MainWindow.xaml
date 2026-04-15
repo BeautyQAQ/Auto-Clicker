@@ -59,12 +59,14 @@
             <TextBlock
                 x:Name="StatusTextBlock"
                 FontWeight="SemiBold"
-                Text="状态：已停止" />
+                Text="状态：已停止"
+                TextWrapping="WrapWholeWords" />
 
             <!-- 诊断：用于区分“热键是否触发”与“注入是否成功” -->
             <TextBlock
                 x:Name="HotKeyDiagnosticTextBlock"
-                Text="诊断：热键未初始化" />
+                Text="诊断：热键未初始化"
+                TextWrapping="WrapWholeWords" />
 
             <TextBlock
                 x:Name="InjectionDiagnosticTextBlock"

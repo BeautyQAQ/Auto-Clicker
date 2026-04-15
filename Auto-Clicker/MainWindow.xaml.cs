@@ -14,6 +14,8 @@ namespace Auto_Clicker
     public sealed partial class MainWindow : Window
     {
         // 常量说明（与 Win32 API 交互时使用）：
+        private const int DefaultWindowWidth = 600; // 默认窗口宽度，确保状态/诊断文本可完整展示
+        private const int DefaultWindowHeight = 360; // 默认窗口高度，避免新增诊断区域被裁剪
         private const int GwlWndProc = -4; // 用于替换窗口过程的索引
         private const int HotKeyId = 0x1200; // 注册热键时的 ID（随便选一个唯一值）
         private const uint WmHotKey = 0x0312; // Windows 消息：热键触发
@@ -84,7 +86,7 @@ namespace Auto_Clicker
             }
 
             AppWindow appWindow = AppWindow.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd));
-            appWindow.Resize(new SizeInt32(460, 300));
+            appWindow.Resize(new SizeInt32(DefaultWindowWidth, DefaultWindowHeight));
         }
 
         private void TryInitializeHotKeyInterop()
