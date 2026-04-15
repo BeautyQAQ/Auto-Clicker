@@ -65,15 +65,15 @@
     <!--
       WindowsPackageType 设置为 None，表示不使用特殊的 Windows 包类型。
     -->
-	<WindowsPackageType>None</WindowsPackageType>
+    <WindowsPackageType>None</WindowsPackageType>
     <!--
       AppxPackage 设置为 false，表示不生成 Appx 包。
     -->
-	<AppxPackage>false</AppxPackage>
+    <AppxPackage>false</AppxPackage>
     <!--
       WindowsAppSDKSelfContained 设置为 true，表示发布时包含 Windows App SDK 运行时。
     -->
-	<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <!--
