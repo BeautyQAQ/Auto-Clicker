@@ -23,6 +23,9 @@ namespace Auto_Clicker
         private const uint InputMouse = 0; // SendInput 的鼠标输入类型
         private const uint MouseeventfLeftdown = 0x0002; // 鼠标左键按下
         private const uint MouseeventfLeftup = 0x0004; // 鼠标左键弹起
+        private const uint WmLButtonDown = 0x0201; // 鼠标左键按下窗口消息
+        private const uint WmLButtonUp = 0x0202; // 鼠标左键抬起窗口消息
+        private const int MkLButton = 0x0001; // wParam 标记：鼠标左键状态
 
         // 用于保存原始窗口过程和委托，处理全局热键消息
         // 注意：需要持有委托引用，避免被 GC 回收导致回调失效
@@ -200,7 +203,7 @@ namespace Auto_Clicker
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    // 将鼠标移动到指定位置并通过 SendInput 注入一次左键点击（按下 + 抬起）
+                    // 首先尝试通过 SendInput 注入（适用于普通桌面应用）
                     if (!SetCursorPos(point.X, point.Y))
                     {
                         int cursorError = Marshal.GetLastWin32Error();
@@ -208,6 +211,21 @@ namespace Auto_Clicker
                     }
 
                     uint sentCount = SendLeftClickInput();
+
+                    // 同时向鼠标所在位置的窗口直接发送鼠标消息（适用于游戏等使用
+                    // DirectInput / Raw Input 的程序，它们可能忽略 SendInput 注入）
+                    IntPtr targetHwnd = WindowFromPoint(point);
+                    if (targetHwnd != IntPtr.Zero)
+                    {
+                        // 将屏幕坐标转换为目标窗口的客户区坐标
+                        POINT clientPoint = point;
+                        ScreenToClient(targetHwnd, ref clientPoint);
+                        IntPtr clientLparam = MakeLParam(clientPoint.X, clientPoint.Y);
+
+                        PostMessage(targetHwnd, WmLButtonDown, (IntPtr)MkLButton, clientLparam);
+                        PostMessage(targetHwnd, WmLButtonUp, IntPtr.Zero, clientLparam);
+                    }
+
                     if (sentCount != 2)
                     {
                         int sendError = Marshal.GetLastWin32Error();
@@ -307,6 +325,12 @@ namespace Auto_Clicker
         // WndProc 委托类型，用于窗口过程替换
         private delegate IntPtr WndProc(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
 
+        // 将两个 16 位坐标值打包为 LPARAM（低位 = X，高位 = Y）
+        private static IntPtr MakeLParam(int x, int y)
+        {
+            return (IntPtr)((y << 16) | (x & 0xFFFF));
+        }
+
         // 使用 P/Invoke 声明与 Win32 API 的互操作函数
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -322,6 +346,15 @@ namespace Auto_Clicker
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint SendInput(uint nInputs, [In] INPUT[] pInputs, int cbSize);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport("user32.dll")]
+        private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
