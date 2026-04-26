@@ -16,23 +16,17 @@ namespace Auto_Clicker
         // 常量说明（与 Win32 API 交互时使用）：
         private const int DefaultWindowWidth = 600; // 默认窗口宽度，确保状态/诊断文本可完整展示
         private const int DefaultWindowHeight = 360; // 默认窗口高度，避免新增诊断区域被裁剪
-        private const int GwlWndProc = -4; // 用于替换窗口过程的索引
-        private const int HotKeyId = 0x1200; // 注册热键时的 ID（随便选一个唯一值）
-        private const uint WmHotKey = 0x0312; // Windows 消息：热键触发
+        private const int WhKeyboardLl = 13; // 低级键盘钩子类型
+        private const int WmKeyDown = 0x0100; // 键盘按下消息
         private const uint VkF10 = 0x79; // F10 键的虚拟键码
-        private const uint InputMouse = 0; // SendInput 的鼠标输入类型
-        private const uint MouseeventfLeftdown = 0x0002; // 鼠标左键按下
-        private const uint MouseeventfLeftup = 0x0004; // 鼠标左键弹起
         private const uint WmLButtonDown = 0x0201; // 鼠标左键按下窗口消息
         private const uint WmLButtonUp = 0x0202; // 鼠标左键抬起窗口消息
         private const int MkLButton = 0x0001; // wParam 标记：鼠标左键状态
 
-        // 用于保存原始窗口过程和委托，处理全局热键消息
         // 注意：需要持有委托引用，避免被 GC 回收导致回调失效
-        private readonly WndProc _wndProcDelegate;
-        private IntPtr _hwnd;
-        private IntPtr _originalWndProc;
-        private bool _hotKeyRegistered;
+        private readonly LowLevelKeyboardProc _hookCallback;
+        private IntPtr _hookHandle;
+        private bool _hookInstalled;
         private bool _isClicking;
         private CancellationTokenSource? _clickLoopCts;
         private int _hotKeyTriggerCount;
@@ -44,39 +38,20 @@ namespace Auto_Clicker
             InitializeComponent();
             ConfigureWindow();
 
-            // 将托管方法转换为委托以用于窗口过程替换
-            _wndProcDelegate = WindowProc;
-            // 订阅窗口激活和关闭事件
-            Activated += MainWindow_Activated;
+            // 持有委托引用，避免被 GC 回收
+            _hookCallback = KeyboardHookCallback;
             Closed += MainWindow_Closed;
 
-            // 尝试初始化热键互操作（与 Win32 交互注册热键）
-            TryInitializeHotKeyInterop();
+            // 安装低级键盘钩子以在全局范围内监听 F10
+            InstallKeyboardHook();
             UpdateDiagnosticText();
-        }
-
-        private void MainWindow_Activated(object sender, WindowActivatedEventArgs args)
-        {
-            // 当窗口被激活（例如用户切换回应用）时，确保热键已注册
-            TryInitializeHotKeyInterop();
         }
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
-            // 关闭窗口时清理：停止连点、注销热键、恢复原始窗口过程
+            // 关闭窗口时清理：停止连点、卸载键盘钩子
             StopClicking();
-
-            if (_hotKeyRegistered && _hwnd != IntPtr.Zero)
-            {
-                UnregisterHotKey(_hwnd, HotKeyId);
-                _hotKeyRegistered = false;
-            }
-
-            if (_originalWndProc != IntPtr.Zero && _hwnd != IntPtr.Zero)
-            {
-                SetWindowLongPtr(_hwnd, GwlWndProc, _originalWndProc);
-                _originalWndProc = IntPtr.Zero;
-            }
+            UninstallKeyboardHook();
         }
 
         private void ConfigureWindow()
@@ -92,46 +67,36 @@ namespace Auto_Clicker
             appWindow.Resize(new SizeInt32(DefaultWindowWidth, DefaultWindowHeight));
         }
 
-        private void TryInitializeHotKeyInterop()
+        private void InstallKeyboardHook()
         {
-            // 如果已经注册，就不重复注册
-            if (_hotKeyRegistered)
+            if (_hookInstalled)
             {
                 return;
             }
 
-            _hwnd = WindowNative.GetWindowHandle(this);
-            if (_hwnd == IntPtr.Zero)
+            _hookHandle = SetWindowsHookEx(WhKeyboardLl, _hookCallback,
+                GetModuleHandle(null), 0);
+
+            if (_hookHandle == IntPtr.Zero)
             {
+                int error = Marshal.GetLastWin32Error();
+                StatusTextBlock.Text = $"状态：键盘钩子安装失败（错误码 {error}）";
                 return;
             }
 
-            // 替换窗口过程以便接收 WM_HOTKEY 消息
-            if (_originalWndProc == IntPtr.Zero)
-            {
-                IntPtr newWndProc = Marshal.GetFunctionPointerForDelegate(_wndProcDelegate);
-                IntPtr previousWndProc = SetWindowLongPtr(_hwnd, GwlWndProc, newWndProc);
-                int setWndProcError = Marshal.GetLastWin32Error();
-                if (previousWndProc == IntPtr.Zero && setWndProcError != 0)
-                {
-                    StatusTextBlock.Text = $"状态：窗口消息钩子初始化失败（错误码 {setWndProcError}）";
-                    return;
-                }
-
-                _originalWndProc = previousWndProc;
-            }
-
-            // 注册全局热键（F10），修饰键参数为 0 表示不需要 Ctrl/Alt/Shift/Win
-            if (!RegisterHotKey(_hwnd, HotKeyId, 0, VkF10))
-            {
-                int registerError = Marshal.GetLastWin32Error();
-                StatusTextBlock.Text = $"状态：F10 热键注册失败（错误码 {registerError}）";
-                return;
-            }
-
-            _hotKeyRegistered = true;
+            _hookInstalled = true;
             StatusTextBlock.Text = "状态：已停止（F10 可用）";
             UpdateDiagnosticText();
+        }
+
+        private void UninstallKeyboardHook()
+        {
+            if (_hookInstalled && _hookHandle != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hookHandle);
+                _hookHandle = IntPtr.Zero;
+                _hookInstalled = false;
+            }
         }
 
         // 切换开始/停止自动点击
@@ -172,7 +137,7 @@ namespace Auto_Clicker
             _injectedClickCount = 0;
             _lastDiagnosticUpdateUtc = DateTime.MinValue;
             StatusTextBlock.Text = $"状态：连点中（{intervalMs}ms, X={currentPoint.X}, Y={currentPoint.Y}）";
-            InjectionDiagnosticTextBlock.Text = "诊断：已启动注入循环，等待 SendInput 结果...";
+            InjectionDiagnosticTextBlock.Text = "诊断：已启动 PostMessage 注入循环...";
 
             // 启动后台循环任务来持续点击（不阻塞 UI 线程）
             _ = RunClickLoopAsync(currentPoint, intervalMs, _clickLoopCts.Token);
@@ -186,12 +151,12 @@ namespace Auto_Clicker
             _clickLoopCts?.Dispose();
             _clickLoopCts = null;
 
-            if (_hotKeyRegistered)
+            if (_hookInstalled)
             {
                 StatusTextBlock.Text = "状态：已停止";
             }
 
-            if (InjectionDiagnosticTextBlock.Text.StartsWith("诊断：SendInput 成功", StringComparison.Ordinal))
+            if (InjectionDiagnosticTextBlock.Text.StartsWith("诊断：PostMessage 已注入", StringComparison.Ordinal))
             {
                 InjectionDiagnosticTextBlock.Text = "诊断：注入循环已停止";
             }
@@ -203,17 +168,7 @@ namespace Auto_Clicker
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    // 首先尝试通过 SendInput 注入（适用于普通桌面应用）
-                    if (!SetCursorPos(point.X, point.Y))
-                    {
-                        int cursorError = Marshal.GetLastWin32Error();
-                        InjectionDiagnosticTextBlock.Text = $"诊断：SetCursorPos 失败（错误码 {cursorError}）";
-                    }
-
-                    uint sentCount = SendLeftClickInput();
-
-                    // 同时向鼠标所在位置的窗口直接发送鼠标消息（适用于游戏等使用
-                    // DirectInput / Raw Input 的程序，它们可能忽略 SendInput 注入）
+                    // 通过 PostMessage 向鼠标所在窗口直接发送鼠标消息
                     IntPtr targetHwnd = WindowFromPoint(point);
                     if (targetHwnd != IntPtr.Zero)
                     {
@@ -226,21 +181,13 @@ namespace Auto_Clicker
                         PostMessage(targetHwnd, WmLButtonUp, IntPtr.Zero, clientLparam);
                     }
 
-                    if (sentCount != 2)
+                    _injectedClickCount++;
+                    DateTime nowUtc = DateTime.UtcNow;
+                    if ((nowUtc - _lastDiagnosticUpdateUtc).TotalMilliseconds >= 1000)
                     {
-                        int sendError = Marshal.GetLastWin32Error();
-                        InjectionDiagnosticTextBlock.Text = $"诊断：SendInput 返回 {sentCount}/2（错误码 {sendError}）";
-                    }
-                    else
-                    {
-                        _injectedClickCount++;
-                        DateTime nowUtc = DateTime.UtcNow;
-                        if ((nowUtc - _lastDiagnosticUpdateUtc).TotalMilliseconds >= 1000)
-                        {
-                            InjectionDiagnosticTextBlock.Text =
-                                $"诊断：SendInput 成功 {_injectedClickCount} 次（最近 {DateTime.Now:HH:mm:ss}）";
-                            _lastDiagnosticUpdateUtc = nowUtc;
-                        }
+                        InjectionDiagnosticTextBlock.Text =
+                            $"诊断：PostMessage 已注入 {_injectedClickCount} 次（最近 {DateTime.Now:HH:mm:ss}）";
+                        _lastDiagnosticUpdateUtc = nowUtc;
                     }
 
                     // 使用可取消的延迟，保证停止时能及时退出循环
@@ -267,25 +214,21 @@ namespace Auto_Clicker
             return true;
         }
 
-        // 自定义窗口过程，用来接收 WM_HOTKEY 消息
-        private IntPtr WindowProc(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam)
+        // 低级键盘钩子回调：在全局范围内监听 F10 按下事件
+        private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (message == WmHotKey && wParam.ToInt32() == HotKeyId)
+            if (nCode >= 0 && wParam.ToInt32() == WmKeyDown)
             {
-                // 当 F10 被按下时切换自动点击状态
-                _hotKeyTriggerCount++;
-                UpdateDiagnosticText();
-                ToggleAutoClick();
-                return IntPtr.Zero;
+                KBDLLHOOKSTRUCT keyInfo = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+                if (keyInfo.vkCode == VkF10)
+                {
+                    _hotKeyTriggerCount++;
+                    UpdateDiagnosticText();
+                    ToggleAutoClick();
+                }
             }
 
-            // 将其他消息转发给原始窗口过程
-            if (_originalWndProc != IntPtr.Zero)
-            {
-                return CallWindowProc(_originalWndProc, hWnd, message, wParam, lParam);
-            }
-
-            return DefWindowProc(hWnd, message, wParam, lParam);
+            return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
         }
 
         // POINT 结构代表一个屏幕坐标点（X, Y）
@@ -296,34 +239,19 @@ namespace Auto_Clicker
             public int Y;
         }
 
-        // MOUSEINPUT / INPUT 用于 SendInput 注入鼠标事件
+        // 低级键盘钩子结构体（WH_KEYBOARD_LL 回调的 lParam 指向此结构）
         [StructLayout(LayoutKind.Sequential)]
-        private struct INPUT
+        private struct KBDLLHOOKSTRUCT
         {
-            public uint type;
-            public INPUTUNION U;
-        }
-
-        [StructLayout(LayoutKind.Explicit)]
-        private struct INPUTUNION
-        {
-            [FieldOffset(0)]
-            public MOUSEINPUT mi;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MOUSEINPUT
-        {
-            public int dx;
-            public int dy;
-            public uint mouseData;
-            public uint dwFlags;
+            public uint vkCode;
+            public uint scanCode;
+            public uint flags;
             public uint time;
-            public UIntPtr dwExtraInfo;
+            public IntPtr dwExtraInfo;
         }
 
-        // WndProc 委托类型，用于窗口过程替换
-        private delegate IntPtr WndProc(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+        // 低级键盘钩子回调委托
+        private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
         // 将两个 16 位坐标值打包为 LPARAM（低位 = X，高位 = Y）
         private static IntPtr MakeLParam(int x, int y)
@@ -333,19 +261,19 @@ namespace Auto_Clicker
 
         // 使用 P/Invoke 声明与 Win32 API 的互操作函数
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr GetModuleHandle(string? lpModuleName);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetCursorPos(out POINT lpPoint);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool SetCursorPos(int x, int y);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern uint SendInput(uint nInputs, [In] INPUT[] pInputs, int cbSize);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
@@ -356,65 +284,11 @@ namespace Auto_Clicker
         [DllImport("user32.dll")]
         private static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
-        private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
-        private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-        // SetWindowLongPtr 是一个跨平台（x86/x64）封装，用于设置窗口过程指针
-        private static IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
-        {
-            if (IntPtr.Size == 8)
-            {
-                return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
-            }
-
-            return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
-        }
-
-        private static uint SendLeftClickInput()
-        {
-            INPUT[] inputs =
-            {
-                new INPUT
-                {
-                    type = InputMouse,
-                    U = new INPUTUNION
-                    {
-                        mi = new MOUSEINPUT
-                        {
-                            dwFlags = MouseeventfLeftdown
-                        }
-                    }
-                },
-                new INPUT
-                {
-                    type = InputMouse,
-                    U = new INPUTUNION
-                    {
-                        mi = new MOUSEINPUT
-                        {
-                            dwFlags = MouseeventfLeftup
-                        }
-                    }
-                }
-            };
-
-            return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
-        }
-
         private void UpdateDiagnosticText()
         {
-            string hotKeyState = _hotKeyRegistered ? "已注册" : "未注册";
+            string hookState = _hookInstalled ? "已安装" : "未安装";
             HotKeyDiagnosticTextBlock.Text =
-                $"诊断：热键{hotKeyState}，F10 触发 {_hotKeyTriggerCount} 次";
+                $"诊断：键盘钩子{hookState}，F10 触发 {_hotKeyTriggerCount} 次";
 
             if (_injectedClickCount == 0 && !_isClicking)
             {
